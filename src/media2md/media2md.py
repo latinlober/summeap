@@ -46,6 +46,7 @@ DEFAULT_CONTEXT       = 32768
 PANDOC_PATH           = _cfg.get("pandoc_path",     "pandoc")   or "pandoc"
 XELATEX_PATH          = _cfg.get("xelatex_path",    "xelatex")  or "xelatex"
 DEFAULT_FORMATS       = {f.strip().lower() for f in _cfg.get("default_formats", "pdf,docx").split(",") if f.strip()}
+DEFAULT_DIARIZE       = bool(_cfg.get("default_diarize", "").strip())
 # Margen de seguridad: usamos este % del contexto disponible para el texto
 CONTEXT_USE_RATIO  = 0.75
 # Aprox. chars por token (conservador para español/inglés mixto)
@@ -639,7 +640,7 @@ def main() -> None:
     parser.add_argument("--style", "-s", default=DEFAULT_STYLE,
                         choices=["executive", "normal", "detailed"],
                         help="Estilo del resumen: executive (alto nivel), normal (default), detailed (exhaustivo)")
-    parser.add_argument("--diarize", "-d", action="store_true",
+    parser.add_argument("--diarize", "-d", action="store_true", default=DEFAULT_DIARIZE,
                         help="Identificar hablantes (requiere HF_TOKEN en el entorno)")
     parser.add_argument("--transcript-only", action="store_true",
                         help="Solo transcribir, sin pasar por LM Studio")

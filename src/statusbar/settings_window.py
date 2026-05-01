@@ -89,11 +89,11 @@ SECTIONS = [
         ("HF Token", "hf_token", "password", "hf_...  (only needed for diarization)"),
     ]),
     ("Export", [
-        ("pandoc",          "pandoc_path",     "text",       "/opt/homebrew/bin/pandoc"),
-        ("xelatex",         "xelatex_path",    "text",       "/usr/local/bin/xelatex"),
-        ("Default Formats", "default_formats", "checkboxes", [("PDF", "pdf"),
-                                                               ("Word", "docx"),
-                                                               ("Diarize", "diarize")]),
+        ("pandoc",         "pandoc_path",     "text",       "/opt/homebrew/bin/pandoc"),
+        ("xelatex",        "xelatex_path",    "text",       "/usr/local/bin/xelatex"),
+        ("Output Formats", "default_formats", "checkboxes", [("PDF", "pdf"),
+                                                              ("Word", "docx")]),
+        ("Diarize",        "default_diarize", "checkboxes", [("Enable speaker diarization", "diarize")]),
     ]),
     ("Hotkeys", [
         ("Toggle Recording", "hotkey_toggle", "text", "<cmd>+<shift>+r"),

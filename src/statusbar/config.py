@@ -34,6 +34,7 @@ DEFAULTS = {
     "pandoc_path":     "",   # auto-detected at first load if empty
     "xelatex_path":    "",   # auto-detected at first load if empty
     "default_formats": "pdf,docx",  # comma-separated: pdf, docx
+    "default_diarize": "",          # "diarize" to enable, "" to disable
 }
 
 

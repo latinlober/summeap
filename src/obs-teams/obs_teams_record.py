@@ -231,11 +231,20 @@ def _prompt_transcribe(video_path: Path) -> None:
     """Pregunta via diálogo si quiere transcribir y lanza media2md en Terminal."""
     import stat, tempfile
 
-    # Derive default dialog choice from config default_formats
-    _fmt = {f.strip().lower() for f in _cfg.get("default_formats", "pdf,docx").split(",") if f.strip()}
+    # Derive default dialog choice from config
+    _fmt      = {f.strip().lower() for f in _cfg.get("default_formats", "pdf,docx").split(",") if f.strip()}
+    _diarize  = bool(_cfg.get("default_diarize", "").strip())
     _has_pdf  = "pdf"  in _fmt
     _has_docx = "docx" in _fmt
-    if _has_pdf and _has_docx:
+    if _diarize and _has_pdf and _has_docx:
+        _default_choice = "MD + Diarización + PDF + Word"
+    elif _diarize and _has_pdf:
+        _default_choice = "MD + Diarización + PDF"
+    elif _diarize and _has_docx:
+        _default_choice = "MD + Diarización + Word"
+    elif _diarize:
+        _default_choice = "MD + Diarización"
+    elif _has_pdf and _has_docx:
         _default_choice = "MD + PDF + Word"
     elif _has_pdf:
         _default_choice = "MD + PDF"
