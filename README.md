@@ -2,7 +2,7 @@
 
 **Summeap** converts audio and video recordings (MP4, MOV, MP3, WAV…) into structured Markdown summaries using local AI — no cloud, no subscriptions.
 
-Built around [Whisper](https://github.com/openai/whisper) for transcription and [LM Studio](https://lmstudio.ai) as the local LLM backend. Includes optional OBS integration to auto-record Microsoft Teams calls.
+Built around [Whisper](https://github.com/openai/whisper) for transcription and [LM Studio](https://lmstudio.ai) as the local LLM backend. Includes OBS integration and a lightweight CLI recorder to auto-record Microsoft Teams calls.
 
 ---
 
@@ -15,7 +15,8 @@ Built around [Whisper](https://github.com/openai/whisper) for transcription and 
 - 🧠 **Multiple models at once**: pass a comma-separated list and get one report per model
 - 🎨 **Three summary styles**: `executive`, `normal`, `detailed`
 - 🐳 **Docker support** for CPU and NVIDIA CUDA
-- 🔴 **OBS integration**: one hotkey (`Cmd+Shift+R`) to start/stop recording Teams calls
+- 🔴 **macOS status bar app**: native menubar icon, live recording counter, settings UI, global hotkey (`Cmd+Shift+R`)
+- 🎬 **Two recording backends**: OBS Studio (full scene switching) or lightweight ffmpeg CLI recorder (no OBS required)
 
 ---
 
@@ -125,17 +126,19 @@ meeting_qwen3-35b.md   / .docx
 A native macOS menubar app built with Python + `rumps`:
 
 ```bash
-pip3 install rumps pynput obsws-python
+pip3 install rumps obsws-python
 python3 src/statusbar/summeap_app.py
 ```
 
 | Feature | Description |
 |---------|-------------|
-| 🔴 / ⚫ icon | Live recording state, polls OBS every 3s |
+| 🔴 / ⚫ icon | Live recording state |
+| Recording counter | Shows elapsed time and backend while recording (e.g. `🔴 OBS 4:32`) |
 | Start / Stop | Toggle recording from the menu |
 | Recent Summaries | Top 10 summaries from recordings folder, click to open |
-| Settings | Configure OBS, paths, tokens and models without editing code |
-| `Cmd+Shift+R` | Global hotkey via `pynput` (replaces Hammerspoon) |
+| Settings | Configure recorder, OBS, paths, tokens and models |
+| `Cmd+Shift+R` | Global hotkey via CGEventTap (no Hammerspoon needed) |
+| Show Log | View media2md processing output |
 
 Config is stored at `~/.config/summeap/config.json` and shared with `obs_teams_record.py`.
 
@@ -143,54 +146,36 @@ See [`src/statusbar/README.md`](src/statusbar/README.md) for full setup instruct
 
 ---
 
-## OBS + Teams Integration
+## Recording Backends
 
-Automatically records Microsoft Teams calls and triggers summarisation when you stop recording.
+The status bar app supports two recording backends, switchable from **Settings → Recorder → Backend**.
 
-### Components
+### OBS Studio (`obs`)
+Full scene switching and Teams window auto-detection. Requires OBS Studio with the WebSocket server enabled.
 
-| File | Purpose |
-|------|---------|
-| `obs_teams_record.py` | OBS WebSocket controller |
-| `hammerspoon_init.lua` | Global hotkey + menubar indicator |
+1. Enable WebSocket server in OBS → *Tools → WebSocket Server Settings* (port 4455, set a password)
+2. Create a scene named `Teams` with a *macOS Window Capture* source
+3. Set the OBS password in **Settings → OBS Connection**
 
-### Setup
+### CLI Recorder (`cli`)
+Lightweight ffmpeg-based recorder — no OBS installation needed. Records audio (and optionally screen) directly using `avfoundation`.
 
-1. **OBS**: enable WebSocket server in *Tools → WebSocket Server Settings* (port 4455, set a password). Create a scene named `Teams` with a *macOS Window Capture* source named `macOS Window Capture`.
+1. `brew install ffmpeg`
+2. In **Settings → Recorder**: set Backend to `cli`, set Audio Device (e.g. `:0` for default mic, or `:BlackHole 2ch` for loopback)
+3. Leave Video Device as `none` for audio-only, or set `desktop` for screen capture
 
-2. **Hammerspoon**: install from [hammerspoon.org](https://hammerspoon.org), copy `hammerspoon_init.lua` to `~/.hammerspoon/init.lua`, reload config.
-
-3. **Edit constants** in `obs_teams_record.py`:
-   ```python
-   OBS_PASSWORD   = "your_obs_password"
-   RECORDINGS_DIR = Path("/your/recordings/folder")
-   MEDIA2MD       = "/path/to/media2md.py"
-   HF_TOKEN       = "your_hf_token"  # only needed for diarization
-   PYTHON         = "/usr/bin/python3"
-   EXTRA_PATH     = "/usr/local/bin:/opt/homebrew/bin"
-   ```
-
-4. **Usage**: press `Cmd+Shift+R` to start recording. The script:
-   - Switches OBS to the Teams scene
-   - Auto-detects the active Teams call window
-   - Fits it to full canvas
-   - Renames the recording with the meeting title as prefix
-   - Shows a dialog to choose the summary format when you stop
-
-### Workflow
+### Workflow (both backends)
 
 ```
 Cmd+Shift+R (start)
-  └── OBS switches to Teams scene
-  └── Finds Teams call window, fits to screen
-  └── Starts recording
-  └── Menubar shows 🔴 REC
+  └── Backend starts recording
+  └── Menubar shows 🔴 OBS 0:01 (or 🔴 CLI 0:01), counter increments every second
 
 Cmd+Shift+R (stop)
-  └── OBS stops recording
-  └── File renamed: "Meeting Title - 2026-04-28 16-16-21.mov"
-  └── Dialog: choose summary format
-  └── Terminal opens, runs media2md, closes automatically
+  └── Recording stops, file saved to recordings folder
+  └── media2md runs silently in the background
+  └── Open "Show Log" to watch progress
+  └── Output files appear in Recent Summaries when done
 ```
 
 ---
@@ -241,12 +226,15 @@ summeap/
 │   │   ├── obs_teams_record.py   # OBS controller + Teams call integration
 │   │   └── README.md
 │   ├── hammerspoon/
-│   │   ├── hammerspoon_init.lua  # macOS global hotkey (Cmd+Shift+R) — optional
+│   │   ├── hammerspoon_init.lua  # macOS global hotkey (optional, replaced by status bar app)
 │   │   └── README.md
 │   └── statusbar/
 │       ├── summeap_app.py        # macOS status bar app (rumps)
 │       ├── config.py             # Config R/W (~/.config/summeap/config.json)
-│       ├── obs_client.py         # OBS status polling
+│       ├── obs_client.py         # OBS WebSocket status polling + toggle
+│       ├── cli_recorder.py       # Lightweight ffmpeg recording backend
+│       ├── log_window.py         # Native AppKit log panel for media2md output
+│       ├── settings_window.py    # Native AppKit settings panel
 │       └── README.md
 ├── docker/
 │   ├── Dockerfile                # CPU image (macOS / Linux)
@@ -262,14 +250,22 @@ summeap/
 
 ## Roadmap
 
-Contributions and ideas are welcome! Here's what we'd like to tackle next:
-
-- [x] **Status bar app** — native macOS menubar app with summaries list, settings UI and global hotkey (`src/statusbar/`)
-- [ ] **Multi-platform support** — Linux and Windows in addition to macOS (recording integration, hotkeys, system notifications)
-- [ ] **More conferencing platforms** — Zoom, Google Meet, Webex, and others alongside Microsoft Teams
-- [ ] **Lightweight CLI recorder** — replace OBS with a minimal command-line audio/screen capture utility, removing the need for a full OBS installation
-- [ ] **Status bar app** — a native menubar application to browse past summaries, open reports, and configure settings without editing code
-- [ ] **Automated start/stop** — detect call events directly from the conferencing client (join/leave hooks, window focus events) to start and stop recording without any manual hotkey
+- [x] **Local transcription** — mlx-whisper (Apple Silicon) + openai-whisper (CPU fallback)
+- [x] **Local LLM summarisation** — LM Studio / OpenAI-compatible API
+- [x] **Speaker diarization** — pyannote.audio on Apple MPS
+- [x] **Multiple output formats** — Markdown, PDF, Word (.docx)
+- [x] **Multiple models at once** — one Whisper pass, N LLM reports
+- [x] **Docker support** — CPU and NVIDIA CUDA images
+- [x] **OBS + Teams integration** — scene switching, Teams window auto-detection, meeting title in filename
+- [x] **Status bar app** — native macOS menubar app with live recording state, summaries list, settings UI and global hotkey (`Cmd+Shift+R` via CGEventTap)
+- [x] **Recording counter** — elapsed time and backend shown in menubar while recording
+- [x] **Settings UI** — full AppKit panel; configure all options without editing code
+- [x] **Native log window** — AppKit panel streaming media2md output in the background; open on demand via "Show Log"
+- [x] **Lightweight CLI recorder** — ffmpeg-based backend, no OBS required; audio-only or screen+audio, switchable from Settings
+- [ ] **Auto-start on login** — LaunchAgent / Login Items integration
+- [ ] **More conferencing platforms** — Zoom, Google Meet, Webex alongside Microsoft Teams
+- [ ] **Automated start/stop** — detect call join/leave events to start and stop recording without a manual hotkey
+- [ ] **Multi-platform support** — Linux and Windows (recording, hotkeys, notifications)
 
 ---
 

@@ -12,6 +12,7 @@ Add to Login Items for auto-start:
 
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # Ensure sibling modules are importable when run from any directory
@@ -22,6 +23,15 @@ import config as _config
 import obs_client as _obs
 import settings_window as _settings
 import log_window as _log_window
+
+
+def _get_backend():
+    """Return the active recording backend module (obs_client or cli_recorder)."""
+    cfg = _config.load()
+    if cfg.get("recorder_backend", "obs") == "cli":
+        import cli_recorder as _cli
+        return _cli
+    return _obs
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 MAX_SUMMARIES  = 10          # max items shown in Recent Summaries submenu
@@ -36,6 +46,7 @@ class SummeapApp(rumps.App):
     def __init__(self):
         super().__init__(ICON_IDLE, quit_button=None)
         self._recording = False
+        self._rec_start: float = 0.0   # time.time() when recording started
         self._build_menu()
         self._start_hotkey()
 
@@ -49,7 +60,7 @@ class SummeapApp(rumps.App):
         self._summaries_item = rumps.MenuItem("Recent Summaries")
         self._open_folder   = rumps.MenuItem("Open Recordings Folder…", callback=self.on_open_folder)
         self._settings_item = rumps.MenuItem("Settings…", callback=self.on_settings)
-        self._log_item      = rumps.MenuItem("Show OBS Log…", callback=self.on_show_log)
+        self._log_item      = rumps.MenuItem("Show Log…", callback=self.on_show_log)
         self._quit_item     = rumps.MenuItem("Quit", callback=rumps.quit_application)
 
         self.menu = [
@@ -71,9 +82,11 @@ class SummeapApp(rumps.App):
 
     @rumps.timer(POLL_INTERVAL)
     def poll_obs(self, _):
-        recording = _obs.is_recording()
+        recording = _get_backend().is_recording()
         if recording != self._recording:
             self._recording = recording
+            if recording:
+                self._rec_start = time.time()
             self._update_ui()
         # Refresh summaries on every tick (cheap glob, only updates menu items)
         self._refresh_summaries()
@@ -82,7 +95,7 @@ class SummeapApp(rumps.App):
 
     def _update_ui(self):
         if self._recording:
-            self.title = ICON_RECORDING
+            self._update_title_counter()
             self._status_item.title = "●  Recording…"
             self._toggle_item.title = "Stop Recording"
         else:
@@ -90,10 +103,29 @@ class SummeapApp(rumps.App):
             self._status_item.title = "○  Not recording"
             self._toggle_item.title = "Start Recording"
 
+    def _update_title_counter(self):
+        """Update menubar title with backend name and elapsed time."""
+        cfg     = _config.load()
+        backend = cfg.get("recorder_backend", "obs").upper()
+        elapsed = int(time.time() - self._rec_start)
+        hours, rem = divmod(elapsed, 3600)
+        mins, secs = divmod(rem, 60)
+        if hours:
+            counter = f"{hours}:{mins:02d}:{secs:02d}"
+        else:
+            counter = f"{mins}:{secs:02d}"
+        self.title = f"{ICON_RECORDING} {backend} {counter}"
+
+    @rumps.timer(1)
+    def tick_counter(self, _):
+        """Update the recording counter in the title every second."""
+        if self._recording:
+            self._update_title_counter()
+
     # ── Toggle recording ─────────────────────────────────────────────────────
 
     def on_toggle(self, _):
-        _obs.toggle()
+        _get_backend().toggle()
 
     # ── Recent summaries submenu ─────────────────────────────────────────────
 
@@ -219,7 +251,7 @@ class SummeapApp(rumps.App):
                         Quartz.kCGEventFlagMaskControl | Quartz.kCGEventFlagMaskAlternate
                     )
                     if code == key_code and flags == required_mods:
-                        _obs.toggle()
+                        _get_backend().toggle()
             except Exception as e:
                 print(f"hotkey tap error: {e}")
             return event

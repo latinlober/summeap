@@ -35,6 +35,12 @@ DEFAULTS = {
     "xelatex_path":    "",   # auto-detected at first load if empty
     "default_formats": "pdf,docx",  # comma-separated: pdf, docx
     "default_diarize": "",          # "diarize" to enable, "" to disable
+    # ── CLI recorder ──────────────────────────────────────────────────────────
+    "recorder_backend":  "obs",     # "obs" | "cli"
+    "ffmpeg_path":       "",        # auto-detected at first load if empty
+    "cli_audio_device":  "",        # avfoundation audio device, e.g. ":0" or ":BlackHole 2ch"
+    "cli_video_device":  "none",    # "none" = audio-only; "desktop" = screen capture
+    "cli_quality":       "medium",  # "low" | "medium" | "high"
 }
 
 
@@ -54,6 +60,9 @@ def load() -> dict:
         changed = True
     if not cfg.get("xelatex_path"):
         cfg["xelatex_path"] = _find("xelatex")
+        changed = True
+    if not cfg.get("ffmpeg_path"):
+        cfg["ffmpeg_path"] = _find("ffmpeg")
         changed = True
     if changed:
         save(cfg)

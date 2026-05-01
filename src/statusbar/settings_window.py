@@ -66,6 +66,13 @@ FONT_BOLD  = NSFont.boldSystemFontOfSize_(12)
 # For "checkboxes": options_or_ph is a list of (label, flag_value) tuples.
 # The config key stores a comma-separated string of active flag_values.
 SECTIONS = [
+    ("Recorder", [
+        ("Backend",      "recorder_backend", "select", ["obs", "cli"]),
+        ("ffmpeg",       "ffmpeg_path",       "text",   "/opt/homebrew/bin/ffmpeg"),
+        ("Audio Device", "cli_audio_device",  "text",   ":0  (index or name, e.g. :BlackHole 2ch)"),
+        ("Video Device", "cli_video_device",  "text",   "none  (audio-only) or desktop"),
+        ("Quality",      "cli_quality",       "select", ["medium", "low", "high"]),
+    ]),
     ("OBS Connection", [
         ("Host",       "obs_host",     "text",     "localhost"),
         ("Port",       "obs_port",     "text",     "4455"),

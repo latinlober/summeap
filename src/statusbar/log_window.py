@@ -1,6 +1,8 @@
 """
 log_window.py — Native floating log window for media2md output.
-Shows a scrollable text view that streams subprocess output in real time.
+
+run_in_log_window() runs silently in the background — no window pops up.
+show_log_window()   is user-triggered (via "Show Log" menu item).
 """
 
 import threading
@@ -14,43 +16,35 @@ from AppKit import (
     NSWindowStyleMaskTitled, NSWindowStyleMaskClosable,
     NSWindowStyleMaskResizable, NSWindowStyleMaskMiniaturizable,
     NSBackingStoreBuffered, NSApp, NSFloatingWindowLevel, NSObject,
-    NSAttributedString,
+    NSForegroundColorAttributeName, NSFontAttributeName,
 )
-from Foundation import NSThread, NSOperationQueue, NSBlockOperation
+from Foundation import NSThread, NSOperationQueue, NSMutableAttributedString, NSRange
+
+WIN_W = 700
+WIN_H = 460
+
+_ATTRS = {
+    NSFontAttributeName:            NSFont.fontWithName_size_("Menlo", 12),
+    NSForegroundColorAttributeName: NSColor.greenColor(),
+}
+
+# ── Singleton ─────────────────────────────────────────────────────────────────
+_panel:    Optional[NSPanel]    = None
+_textview: Optional[NSTextView] = None
+_delegate: Optional[NSObject]   = None
+# ─────────────────────────────────────────────────────────────────────────────
 
 
-# ── Main-thread dispatcher ────────────────────────────────────────────────────
-
-def _dispatch_main(fn):
-    """Run fn on the main thread via NSOperationQueue.mainQueue."""
+def _on_main(fn):
     if NSThread.isMainThread():
         fn()
     else:
         NSOperationQueue.mainQueue().addOperationWithBlock_(fn)
 
-# ─────────────────────────────────────────────────────────────────────────────
 
-# ── Singleton ─────────────────────────────────────────────────────────────────
-_active_panel: Optional[NSPanel] = None
-_active_text_view: Optional[NSTextView] = None
-_active_delegate: Optional[NSObject] = None
-# ─────────────────────────────────────────────────────────────────────────────
-
-WIN_W = 700
-WIN_H = 460
-
-
-def show_log_window(title: str = "Summeap — Processing") -> NSTextView:
-    """Open (or reuse) the log window and return the NSTextView to write to."""
-    global _active_panel, _active_text_view, _active_delegate
-
-    if _active_panel is not None:
-        _active_panel.makeKeyAndOrderFront_(None)
-        NSApp.activateIgnoringOtherApps_(True)
-        # Clear previous content
-        _active_text_view.setString_("")
-        _active_panel.setTitle_(title)
-        return _active_text_view
+def _build_panel(title: str) -> None:
+    """Create panel + text view. Must run on main thread. Panel stays hidden."""
+    global _panel, _textview, _delegate
 
     panel = NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
         NSMakeRect(0, 0, WIN_W, WIN_H),
@@ -63,76 +57,69 @@ def show_log_window(title: str = "Summeap — Processing") -> NSTextView:
     panel.setLevel_(NSFloatingWindowLevel)
     panel.center()
 
-    # Scroll + text view
-    scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(0, 0, WIN_W, WIN_H))
-    scroll.setHasVerticalScroller_(True)
-    scroll.setHasHorizontalScroller_(False)
-    scroll.setAutohidesScrollers_(True)
-
     tv = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, WIN_W, WIN_H))
     tv.setEditable_(False)
     tv.setSelectable_(True)
-    tv.setFont_(NSFont.fontWithName_size_("Menlo", 11))
+    tv.setRichText_(False)
     tv.setBackgroundColor_(NSColor.blackColor())
     tv.setTextColor_(NSColor.greenColor())
+    tv.setFont_(NSFont.fontWithName_size_("Menlo", 12))
     tv.setAutomaticLinkDetectionEnabled_(False)
     tv.setAutomaticQuoteSubstitutionEnabled_(False)
     tv.setAutomaticSpellingCorrectionEnabled_(False)
     tv.textContainer().setWidthTracksTextView_(True)
+    tv.setHorizontallyResizable_(False)
+    tv.setVerticallyResizable_(True)
+    tv.setMaxSize_((1e7, 1e7))
 
+    scroll = NSScrollView.alloc().initWithFrame_(
+        NSMakeRect(0, 0, WIN_W, WIN_H)
+    )
+    scroll.setHasVerticalScroller_(True)
+    scroll.setHasHorizontalScroller_(False)
+    scroll.setAutohidesScrollers_(True)
+    scroll.setAutoresizingMask_(18)   # width + height
     scroll.setDocumentView_(tv)
-    scroll.setAutoresizingMask_(18)  # width + height
+    scroll.setDrawsBackground_(False)
 
     panel.contentView().addSubview_(scroll)
+    panel.contentView().setAutoresizesSubviews_(True)
 
-    # Delegate to clear singleton on close
     delegate = _PanelDelegate.alloc().init()
     panel.setDelegate_(delegate)
 
-    _active_panel    = panel
-    _active_text_view = tv
-    _active_delegate = delegate
-
-    panel.makeKeyAndOrderFront_(None)
-    NSApp.activateIgnoringOtherApps_(True)
-    return tv
+    _panel    = panel
+    _textview = tv
+    _delegate = delegate
 
 
-def append_text(text_view: NSTextView, text: str):
-    """Append text to the log window on the main thread."""
-    def _append():
-        storage = text_view.textStorage()
-        end = storage.length()
-        attr_str = NSAttributedString.alloc().initWithString_attributes_(
-            text,
-            {
-                "NSFont": NSFont.fontWithName_size_("Menlo", 11),
-                "NSForegroundColor": NSColor.greenColor(),
-            }
-        )
-        storage.insertAttributedString_atIndex_(attr_str, end)
-        # Scroll to bottom
-        text_view.scrollRangeToVisible_((storage.length(), 0))
-    _dispatch_main(_append)
+# ── Public API ────────────────────────────────────────────────────────────────
+
+def show_log_window():
+    """Bring the log window to front. Creates it (empty) if needed."""
+    def _show():
+        if _panel is None:
+            _build_panel("Summeap — Log")
+        _panel.makeKeyAndOrderFront_(None)
+        NSApp.activateIgnoringOtherApps_(True)
+    _on_main(_show)
 
 
 def run_in_log_window(job: dict):
-    """Run media2md from a job dict, streaming output to the log window."""
-    video_path  = job["video_path"]
-    python      = job["python"]
-    media2md    = job["media2md"]
-    hf_token    = job.get("hf_token", "")
-    extra_path  = job.get("extra_path", "")
-    diarize     = job.get("diarize_flag", "")
-    pdf_flag    = job.get("pdf_flag", "")
-    docx_flag   = job.get("docx_flag", "")
-
-    title = f"Summeap — {Path(video_path).name}"
-    tv = show_log_window(title)
+    """Prepare the log buffer for this job and stream media2md output into it.
+    The window stays hidden until the user opens it via 'Show Log'."""
+    video_path = job["video_path"]
+    python     = job["python"]
+    media2md   = job["media2md"]
+    hf_token   = job.get("hf_token", "")
+    extra_path = job.get("extra_path", "")
+    title      = f"Summeap — {Path(video_path).name}"
 
     cmd = [x for x in [
         python, media2md,
-        diarize, pdf_flag, docx_flag,
+        job.get("diarize_flag", ""),
+        job.get("pdf_flag", ""),
+        job.get("docx_flag", ""),
         "--style", "detailed", "--save-transcript",
         video_path,
     ] if x]
@@ -141,27 +128,57 @@ def run_in_log_window(job: dict):
     env["HF_TOKEN"] = hf_token
     env["PATH"]     = extra_path + ":" + env.get("PATH", "")
 
-    def _stream():
-        append_text(tv, f"$ {' '.join(cmd)}\n\n")
-        try:
-            proc = subprocess.Popen(
-                cmd, env=env,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1,
-            )
-            for line in proc.stdout:
-                append_text(tv, line)
-            proc.wait()
-            append_text(tv, f"\n--- Proceso completado (exit {proc.returncode}) ---\n")
-        except Exception as e:
-            append_text(tv, f"\nERROR: {e}\n")
+    def _prepare():
+        global _panel, _textview
+        if _panel is None:
+            _build_panel(title)
+        else:
+            # Clear text storage directly — do NOT call setString_ (resets color)
+            storage = _textview.textStorage()
+            storage.beginEditing()
+            storage.deleteCharactersInRange_((0, storage.length()))
+            storage.endEditing()
+            _panel.setTitle_(title)
+        threading.Thread(target=_stream, args=(_textview, cmd, env), daemon=True).start()
 
-    threading.Thread(target=_stream, daemon=True).start()
+    _on_main(_prepare)
+
+
+def _stream(tv: NSTextView, cmd: list, env: dict):
+    _append(tv, "$ " + " ".join(cmd) + "\n\n")
+    try:
+        proc = subprocess.Popen(
+            cmd, env=env,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1,
+        )
+        for line in proc.stdout:
+            _append(tv, line)
+        proc.wait()
+        _append(tv, f"\n--- Done (exit {proc.returncode}) ---\n")
+    except Exception as e:
+        _append(tv, f"\nERROR: {e}\n")
+
+
+def _append(tv: NSTextView, text: str):
+    def _do():
+        astr = NSMutableAttributedString.alloc().initWithString_(text)
+        rng = (0, astr.length())
+        astr.addAttribute_value_range_(
+            NSForegroundColorAttributeName, NSColor.greenColor(), rng)
+        astr.addAttribute_value_range_(
+            NSFontAttributeName, NSFont.fontWithName_size_("Menlo", 12), rng)
+        storage = tv.textStorage()
+        storage.beginEditing()
+        storage.appendAttributedString_(astr)
+        storage.endEditing()
+        tv.scrollRangeToVisible_((storage.length(), 0))
+    _on_main(_do)
 
 
 # ── Delegate ──────────────────────────────────────────────────────────────────
 
 class _PanelDelegate(NSObject):
     def windowWillClose_(self, notification):
-        global _active_panel, _active_text_view, _active_delegate
-        _active_panel = _active_text_view = _active_delegate = None
+        global _panel, _textview, _delegate
+        _panel = _textview = _delegate = None
