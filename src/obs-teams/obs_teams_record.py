@@ -244,7 +244,8 @@ def _prompt_transcribe(video_path: Path) -> None:
     else:
         _default_choice = "Solo MD"
 
-    script = f"""tell application "System Events"
+    script = f"""tell application "Finder"
+    activate
     set opts to {{"Solo MD", "MD + PDF", "MD + Word", "MD + PDF + Word", "MD + Diarización", "MD + Diarización + PDF", "MD + Diarización + Word", "Cancelar"}}
     set resp to choose from list opts ¬
         with title "OBS Teams · {video_path.name}" ¬
