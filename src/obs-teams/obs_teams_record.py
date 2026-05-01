@@ -272,63 +272,21 @@ def _prompt_transcribe(video_path: Path) -> None:
 
     print(f"   Iniciando media2md: diarize={_diarize} pdf={'pdf' in _fmt} docx={'docx' in _fmt}")
 
-    # Escribir el comando en un script temporal para evitar problemas de quoting.
-    # Al terminar, el script se cierra usando el ID de tab que AppleScript nos
-    # devuelve al lanzarlo — guardado en /tmp para que el bash lo use.
-    close_cmd = (
-        'osascript -e "tell application \\"Terminal\\" to close tab'
-        ' (tab 1 of (every window whose frontmost is true))" 2>/dev/null || true'
-    )
-    lines = [
-        "#!/bin/bash",
-        f"export HF_TOKEN={HF_TOKEN!r}",
-        f"export PATH={EXTRA_PATH!r}:$PATH",
-        (f"{PYTHON} {MEDIA2MD} {diarize_flag} {pdf_flag} {docx_flag} --style detailed --save-transcript {str(video_path)!r}"
-         f" 2>&1 | tee {str(log_path)!r}"),
-        "echo '--- Proceso completado. Cerrando ventana en 3s ---'",
-        "sleep 3",
-        close_cmd,
-    ]
-    tmp = Path(tempfile.mktemp(suffix=".sh"))
-    tmp.write_text("\n".join(lines) + "\n")
-    tmp.chmod(tmp.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
-
-    # Lanzar en Terminal y obtener el ID del tab para que el script se cierre
-    # exactamente a sí mismo, independientemente de qué ventana esté activa.
-    applescript = f"""tell application "Terminal"
-    activate
-    set t to do script "bash {tmp}"
-    set tab_id to tab_id of t
-    set win_id to id of (window 1 where (exists (tabs whose tab_id is tab_id)))
-    return (win_id as string) & ":" & (tab_id as string)
-end tell"""
-    id_result = subprocess.run(["osascript", "-e", applescript],
-                               capture_output=True, text=True).stdout.strip()
-
-    # Reescribir el script añadiendo el comando de cierre con IDs exactos
-    if ":" in id_result:
-        win_id, tab_id = id_result.split(":", 1)
-        close_exact = (
-            f'osascript -e "tell application \\"Terminal\\" to close'
-            f' (tab {tab_id} of window id {win_id})" 2>/dev/null || true'
-        )
-        updated_lines = [l for l in lines if "close tab" not in l] + [
-            "echo '--- Proceso completado. Cerrando ventana en 3s ---'",
-            "sleep 3",
-            close_exact,
-        ]
-        # Eliminar el echo/sleep/close originales y reemplazar
-        core_lines = [l for l in lines
-                      if not l.startswith("echo '---") and "sleep 3" not in l
-                      and "close tab" not in l]
-        final_lines = core_lines + [
-            "echo '--- Proceso completado. Cerrando ventana en 3s ---'",
-            "sleep 3",
-            close_exact,
-        ]
-        tmp.write_text("\n".join(final_lines) + "\n")
-
-    print(f"   Lanzando media2md en Terminal ({choice})...")
+    # Write a job file for the statusbar app to pick up and run with live output
+    import json as _json
+    job = {
+        "video_path":   str(video_path),
+        "python":       PYTHON,
+        "media2md":     MEDIA2MD,
+        "hf_token":     HF_TOKEN,
+        "extra_path":   EXTRA_PATH,
+        "diarize_flag": diarize_flag,
+        "pdf_flag":     pdf_flag,
+        "docx_flag":    docx_flag,
+    }
+    job_path = Path("/tmp/summeap_job.json")
+    job_path.write_text(_json.dumps(job))
+    print(f"   Job escrito en {job_path}")
 
 
 def toggle_recording() -> None:

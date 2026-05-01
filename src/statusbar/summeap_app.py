@@ -21,6 +21,7 @@ import rumps  # type: ignore
 import config as _config
 import obs_client as _obs
 import settings_window as _settings
+import log_window as _log_window
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 MAX_SUMMARIES  = 10          # max items shown in Recent Summaries submenu
@@ -76,6 +77,8 @@ class SummeapApp(rumps.App):
             self._update_ui()
         # Refresh summaries on every tick (cheap glob, only updates menu items)
         self._refresh_summaries()
+        # Pick up any pending media2md job written by obs_teams_record.py
+        self._check_job_file()
 
     def _update_ui(self):
         if self._recording:
@@ -141,16 +144,23 @@ class SummeapApp(rumps.App):
             )
         _settings.show_settings(on_save=_on_save)
 
+    # ── Job file polling ─────────────────────────────────────────────────────
+
+    def _check_job_file(self):
+        import json
+        job_path = Path("/tmp/summeap_job.json")
+        if job_path.exists():
+            try:
+                job = json.loads(job_path.read_text())
+                job_path.unlink()
+                _log_window.run_in_log_window(job)
+            except Exception as e:
+                print(f"Error reading job file: {e}")
+
     # ── OBS Log ──────────────────────────────────────────────────────────────
 
     def on_show_log(self, _):
-        from pathlib import Path
-        log_path = Path.home() / ".config" / "summeap" / "obs.log"
-        if not log_path.exists():
-            rumps.notification(title="Summeap", subtitle="No log yet",
-                               message="No OBS activity has been logged yet.")
-            return
-        subprocess.Popen(["open", "-a", "Console", str(log_path)])
+        _log_window.show_log_window()
 
     # ── Global hotkey — Cocoa NSEvent monitor (no pynput / no thread issues) ──
 
