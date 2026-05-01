@@ -22,6 +22,7 @@ DEFAULTS = {
     "llm_model":       "google/gemma-4-26b-a4b",
     "whisper_model":   "large-v3-turbo",
     "default_style":   "detailed",
+    "hotkey_toggle":   "<cmd>+<shift>+r",
 }
 
 

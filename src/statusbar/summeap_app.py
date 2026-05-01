@@ -49,6 +49,7 @@ class SummeapApp(rumps.App):
         self._summaries_item = rumps.MenuItem("Recent Summaries")
         self._open_folder   = rumps.MenuItem("Open Recordings Folder…", callback=self.on_open_folder)
         self._settings_item = rumps.MenuItem("Settings…", callback=self.on_settings)
+        self._log_item      = rumps.MenuItem("Show OBS Log…", callback=self.on_show_log)
         self._quit_item     = rumps.MenuItem("Quit", callback=rumps.quit_application)
 
         self.menu = [
@@ -59,6 +60,7 @@ class SummeapApp(rumps.App):
             self._open_folder,
             None,
             self._settings_item,
+            self._log_item,
             self._quit_item,
         ]
         # Add a placeholder so rumps initialises the NSMenu backing object now;
@@ -132,6 +134,7 @@ class SummeapApp(rumps.App):
 
     def on_settings(self, _):
         def _on_save(cfg):
+            self._restart_hotkey()
             rumps.notification(
                 title="Summeap",
                 subtitle="Settings saved",
@@ -139,21 +142,50 @@ class SummeapApp(rumps.App):
             )
         _settings.show_settings(on_save=_on_save)
 
+    # ── OBS Log ──────────────────────────────────────────────────────────────
+
+    def on_show_log(self, _):
+        from pathlib import Path
+        log_path = Path.home() / ".config" / "summeap" / "obs.log"
+        if not log_path.exists():
+            rumps.notification(title="Summeap", subtitle="No log yet",
+                               message="No OBS activity has been logged yet.")
+            return
+        subprocess.Popen(["open", "-a", "Console", str(log_path)])
+
     # ── Global hotkey (optional — requires pynput) ───────────────────────────
 
     def _start_hotkey(self):
+        self._hotkey_listener = None
+        self._restart_hotkey()
+
+    def _restart_hotkey(self):
         try:
             from pynput import keyboard  # type: ignore
+
+            # Stop existing listener if any
+            if getattr(self, "_hotkey_listener", None) is not None:
+                try:
+                    self._hotkey_listener.stop()
+                except Exception:
+                    pass
+                self._hotkey_listener = None
+
+            cfg = _config.load()
+            key_combo = cfg.get("hotkey_toggle", "<cmd>+<shift>+r").strip()
+            if not key_combo:
+                return
 
             def on_activate():
                 _obs.toggle()
 
-            hotkeys = keyboard.GlobalHotKeys({"<cmd>+<shift>+r": on_activate})
-            t = threading.Thread(target=hotkeys.start, daemon=True)
+            listener = keyboard.GlobalHotKeys({key_combo: on_activate})
+            t = threading.Thread(target=listener.start, daemon=True)
             t.start()
-            print("Global hotkey Cmd+Shift+R registered via pynput")
+            self._hotkey_listener = listener
+            print(f"Global hotkey {key_combo!r} registered via pynput")
         except ImportError:
-            print("pynput not installed — global hotkey disabled (Hammerspoon still works)")
+            print("pynput not installed — global hotkey disabled")
         except Exception as e:
             print(f"Could not register global hotkey: {e}")
 
