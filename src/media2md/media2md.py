@@ -13,6 +13,7 @@ Uso:
 """
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -24,12 +25,27 @@ from pathlib import Path
 # ──────────────────────────────────────────────
 # Configuración
 # ──────────────────────────────────────────────
+def _load_summeap_cfg() -> dict:
+    cfg_path = Path.home() / ".config" / "summeap" / "config.json"
+    if cfg_path.exists():
+        try:
+            return json.loads(cfg_path.read_text())
+        except Exception:
+            pass
+    return {}
+
+_cfg = _load_summeap_cfg()
+
 _LMSTUDIO_BASE = os.environ.get("LMSTUDIO_URL", "http://localhost:1234")
 LMSTUDIO_BASE_URL = _LMSTUDIO_BASE + "/v1"
 LMSTUDIO_API_BASE = _LMSTUDIO_BASE + "/api/v0"
-DEFAULT_LLM_MODEL  = "google/gemma-4-26b-a4b"
-DEFAULT_WHISPER_MODEL = "large-v3-turbo"  # tiny | base | small | medium | large | large-v3-turbo
-DEFAULT_CONTEXT    = 32768           # tokens a solicitar al recargar
+DEFAULT_LLM_MODEL     = _cfg.get("llm_model",      "google/gemma-4-26b-a4b")
+DEFAULT_WHISPER_MODEL = _cfg.get("whisper_model",   "large-v3-turbo")
+DEFAULT_STYLE         = _cfg.get("default_style",   "normal")
+DEFAULT_CONTEXT       = 32768
+PANDOC_PATH           = _cfg.get("pandoc_path",     "pandoc")   or "pandoc"
+XELATEX_PATH          = _cfg.get("xelatex_path",    "xelatex")  or "xelatex"
+DEFAULT_FORMATS       = {f.strip().lower() for f in _cfg.get("default_formats", "pdf,docx").split(",") if f.strip()}
 # Margen de seguridad: usamos este % del contexto disponible para el texto
 CONTEXT_USE_RATIO  = 0.75
 # Aprox. chars por token (conservador para español/inglés mixto)
@@ -570,9 +586,9 @@ def export_pdf(md_path: Path) -> None:
     log("Exportando a PDF con pandoc + xelatex...")
     result = subprocess.run(
         [
-            "pandoc", str(md_path),
+            PANDOC_PATH, str(md_path),
             "-o", str(pdf_path),
-            "--pdf-engine=xelatex",
+            f"--pdf-engine={XELATEX_PATH}",
             "-V", "mainfont=Times New Roman",
             "-V", "sansfont=Helvetica Neue",
             "-V", "monofont=Menlo",
@@ -594,7 +610,7 @@ def export_docx(md_path: Path) -> None:
     docx_path = md_path.with_suffix(".docx")
     log("Exportando a Word (.docx) con pandoc...")
     result = subprocess.run(
-        ["pandoc", str(md_path), "-o", str(docx_path)],
+        [PANDOC_PATH, str(md_path), "-o", str(docx_path)],
         capture_output=True,
         text=True,
     )
@@ -620,7 +636,7 @@ def main() -> None:
                         help=f"Tamaño del modelo Whisper: tiny/base/small/medium/large (default: {DEFAULT_WHISPER_MODEL})")
     parser.add_argument("--context", "-c", type=int, default=DEFAULT_CONTEXT,
                         help=f"Tokens de contexto a solicitar al recargar el modelo (default: {DEFAULT_CONTEXT})")
-    parser.add_argument("--style", "-s", default="normal",
+    parser.add_argument("--style", "-s", default=DEFAULT_STYLE,
                         choices=["executive", "normal", "detailed"],
                         help="Estilo del resumen: executive (alto nivel), normal (default), detailed (exhaustivo)")
     parser.add_argument("--diarize", "-d", action="store_true",
@@ -629,9 +645,9 @@ def main() -> None:
                         help="Solo transcribir, sin pasar por LM Studio")
     parser.add_argument("--save-transcript", action="store_true",
                         help="Guardar también la transcripción en .txt")
-    parser.add_argument("--no-pdf", action="store_true",
-                        help="No exportar a PDF (por defecto se genera el PDF)")
-    parser.add_argument("--docx", action="store_true",
+    parser.add_argument("--no-pdf", action="store_true", default="pdf" not in DEFAULT_FORMATS,
+                        help="No exportar a PDF")
+    parser.add_argument("--docx", action="store_true", default="docx" in DEFAULT_FORMATS,
                         help="Exportar también a Word (.docx) usando pandoc")
     args = parser.parse_args()
 

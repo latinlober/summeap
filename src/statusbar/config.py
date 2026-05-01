@@ -4,9 +4,17 @@ Reads/writes ~/.config/summeap/config.json
 """
 
 import json
+import shutil
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".config" / "summeap" / "config.json"
+
+
+def _find(cmd: str) -> str:
+    """Return the path of a command if found on PATH, else empty string."""
+    found = shutil.which(cmd)
+    return found or ""
+
 
 DEFAULTS = {
     "obs_host":        "localhost",
@@ -23,6 +31,9 @@ DEFAULTS = {
     "whisper_model":   "large-v3-turbo",
     "default_style":   "detailed",
     "hotkey_toggle":   "<cmd>+<shift>+r",
+    "pandoc_path":     "",   # auto-detected at first load if empty
+    "xelatex_path":    "",   # auto-detected at first load if empty
+    "default_formats": "pdf,docx",  # comma-separated: pdf, docx
 }
 
 
@@ -35,6 +46,16 @@ def load() -> dict:
             cfg.update(on_disk)
         except Exception:
             pass
+    # Auto-detect pandoc / xelatex if not yet configured
+    changed = False
+    if not cfg.get("pandoc_path"):
+        cfg["pandoc_path"] = _find("pandoc")
+        changed = True
+    if not cfg.get("xelatex_path"):
+        cfg["xelatex_path"] = _find("xelatex")
+        changed = True
+    if changed:
+        save(cfg)
     return cfg
 
 

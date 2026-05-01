@@ -89,6 +89,11 @@ SECTIONS = [
     ("HuggingFace", [
         ("HF Token", "hf_token", "password", "hf_...  (only needed for diarization)"),
     ]),
+    ("Export", [
+        ("pandoc",          "pandoc_path",     "text", "/opt/homebrew/bin/pandoc"),
+        ("xelatex",         "xelatex_path",    "text", "/usr/local/bin/xelatex"),
+        ("Default Formats", "default_formats", "text", "pdf,docx  (comma-separated: pdf, docx)"),
+    ]),
     ("Hotkeys", [
         ("Toggle Recording", "hotkey_toggle", "text", "<cmd>+<shift>+r"),
     ]),

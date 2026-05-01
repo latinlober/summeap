@@ -20,8 +20,7 @@ from pathlib import Path
 
 # ── Configuración ─────────────────────────────────────────────────────────────
 # Values are loaded from ~/.config/summeap/config.json when available.
-# The hardcoded values below serve as fallback defaults — edit them directly
-# if you prefer not to use the status bar app / config file.
+# The hardcoded values below serve as fallback defaults.
 
 def _load_cfg() -> dict:
     cfg_path = Path.home() / ".config" / "summeap" / "config.json"
@@ -40,9 +39,9 @@ OBS_PASSWORD   = _cfg.get("obs_password",    "your_obs_websocket_password")
 OBS_SCENE      = _cfg.get("obs_scene",       "Teams")
 RECORDINGS_DIR = Path(_cfg.get("recordings_dir", str(Path.home() / "Movies")))
 MEDIA2MD       = _cfg.get("media2md_path",   str(Path.home() / "bin" / "media2md.py"))
-HF_TOKEN       = _cfg.get("hf_token",        "your_huggingface_token")
+HF_TOKEN       = _cfg.get("hf_token",        "")
 PYTHON         = _cfg.get("python_path",     "/usr/bin/python3")
-EXTRA_PATH     = _cfg.get("extra_path",      "/usr/local/bin:/opt/homebrew/bin")
+EXTRA_PATH     = _cfg.get("extra_path",      "/usr/local/bin:/opt/homebrew/bin:/Users/xavi/Library/Python/3.9/bin")
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Fichero temporal donde se persiste el título entre invocaciones separadas
@@ -232,12 +231,25 @@ def _prompt_transcribe(video_path: Path) -> None:
     """Pregunta via diálogo si quiere transcribir y lanza media2md en Terminal."""
     import stat, tempfile
 
+    # Derive default dialog choice from config default_formats
+    _fmt = {f.strip().lower() for f in _cfg.get("default_formats", "pdf,docx").split(",") if f.strip()}
+    _has_pdf  = "pdf"  in _fmt
+    _has_docx = "docx" in _fmt
+    if _has_pdf and _has_docx:
+        _default_choice = "MD + PDF + Word"
+    elif _has_pdf:
+        _default_choice = "MD + PDF"
+    elif _has_docx:
+        _default_choice = "MD + Word"
+    else:
+        _default_choice = "Solo MD"
+
     script = f"""tell application "System Events"
     set opts to {{"Solo MD", "MD + PDF", "MD + Word", "MD + PDF + Word", "MD + Diarización", "MD + Diarización + PDF", "MD + Diarización + Word", "Cancelar"}}
     set resp to choose from list opts ¬
         with title "OBS Teams · {video_path.name}" ¬
         with prompt "¿Generar resumen con media2md?" ¬
-        default items {{"MD + PDF + Word"}}
+        default items {{"{_default_choice}"}}
     if resp is false then return "Cancelar"
     return item 1 of resp
 end tell"""
