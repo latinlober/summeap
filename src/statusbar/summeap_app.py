@@ -60,7 +60,9 @@ class SummeapApp(rumps.App):
             self._settings_item,
             self._quit_item,
         ]
-        self._refresh_summaries()
+        # Add a placeholder so rumps initialises the NSMenu backing object now;
+        # the timer will replace it on the first tick.
+        self._summaries_item.add(rumps.MenuItem("Loading…", callback=None))
 
     # ── OBS polling ──────────────────────────────────────────────────────────
 
@@ -70,6 +72,8 @@ class SummeapApp(rumps.App):
         if recording != self._recording:
             self._recording = recording
             self._update_ui()
+        # Refresh summaries on every tick (cheap glob, only updates menu items)
+        self._refresh_summaries()
 
     def _update_ui(self):
         if self._recording:
@@ -80,7 +84,6 @@ class SummeapApp(rumps.App):
             self.title = ICON_IDLE
             self._status_item.title = "○  Not recording"
             self._toggle_item.title = "Start Recording"
-            self._refresh_summaries()
 
     # ── Toggle recording ─────────────────────────────────────────────────────
 
