@@ -228,52 +228,19 @@ def stop_recording() -> None:
 
 
 def _prompt_transcribe(video_path: Path) -> None:
-    """Pregunta via diálogo si quiere transcribir y lanza media2md en Terminal."""
+    """Lanza media2md usando la configuración de settings, sin diálogo."""
     import stat, tempfile
 
-    # Derive default dialog choice from config
-    _fmt      = {f.strip().lower() for f in _cfg.get("default_formats", "pdf,docx").split(",") if f.strip()}
-    _diarize  = bool(_cfg.get("default_diarize", "").strip())
-    _has_pdf  = "pdf"  in _fmt
-    _has_docx = "docx" in _fmt
-    if _diarize and _has_pdf and _has_docx:
-        _default_choice = "MD + Diarización + PDF + Word"
-    elif _diarize and _has_pdf:
-        _default_choice = "MD + Diarización + PDF"
-    elif _diarize and _has_docx:
-        _default_choice = "MD + Diarización + Word"
-    elif _diarize:
-        _default_choice = "MD + Diarización"
-    elif _has_pdf and _has_docx:
-        _default_choice = "MD + PDF + Word"
-    elif _has_pdf:
-        _default_choice = "MD + PDF"
-    elif _has_docx:
-        _default_choice = "MD + Word"
-    else:
-        _default_choice = "Solo MD"
+    # Read flags directly from config — no dialog shown
+    _fmt     = {f.strip().lower() for f in _cfg.get("default_formats", "pdf,docx").split(",") if f.strip()}
+    _diarize = bool(_cfg.get("default_diarize", "").strip())
 
-    script = f"""tell application "Finder"
-    activate
-    set opts to {{"Solo MD", "MD + PDF", "MD + Word", "MD + PDF + Word", "MD + Diarización", "MD + Diarización + PDF", "MD + Diarización + Word", "Cancelar"}}
-    set resp to choose from list opts ¬
-        with title "OBS Teams · {video_path.name}" ¬
-        with prompt "¿Generar resumen con media2md?" ¬
-        default items {{"{_default_choice}"}}
-    if resp is false then return "Cancelar"
-    return item 1 of resp
-end tell"""
-    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-    choice = result.stdout.strip()
+    diarize_flag = "--diarize" if _diarize  else ""
+    pdf_flag     = ""          if "pdf"  in _fmt else "--no-pdf"
+    docx_flag    = "--docx"    if "docx" in _fmt else ""
+    log_path     = video_path.with_suffix(".log")
 
-    if choice in ("Cancelar", ""):
-        print("   Transcripción omitida")
-        return
-
-    diarize_flag  = "--diarize"  if "Diarización" in choice else ""
-    pdf_flag      = ""           if "PDF"         in choice else "--no-pdf"
-    docx_flag     = "--docx"     if "Word"        in choice else ""
-    log_path      = video_path.with_suffix(".log")
+    print(f"   Iniciando media2md: diarize={_diarize} pdf={'pdf' in _fmt} docx={'docx' in _fmt}")
 
     # Escribir el comando en un script temporal para evitar problemas de quoting.
     # Al terminar, el script se cierra usando el ID de tab que AppleScript nos
