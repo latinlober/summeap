@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import rumps  # type: ignore
 import config as _config
 import obs_client as _obs
+import settings_window as _settings
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 MAX_SUMMARIES  = 10          # max items shown in Recent Summaries submenu
@@ -130,46 +131,13 @@ class SummeapApp(rumps.App):
     # ── Settings ─────────────────────────────────────────────────────────────
 
     def on_settings(self, _):
-        cfg = _config.load()
-        fields = [
-            ("OBS Password",         "obs_password"),
-            ("OBS Host",             "obs_host"),
-            ("OBS Port",             "obs_port"),
-            ("OBS Scene",            "obs_scene"),
-            ("Recordings Folder",    "recordings_dir"),
-            ("media2md.py Path",     "media2md_path"),
-            ("obs_teams_record.py",  "obs_script_path"),
-            ("HuggingFace Token",    "hf_token"),
-            ("Python Path",          "python_path"),
-            ("Extra PATH",           "extra_path"),
-            ("LLM Model",            "llm_model"),
-            ("Whisper Model",        "whisper_model"),
-            ("Default Style",        "default_style"),
-        ]
-        changed = False
-        for label, key in fields:
-            current = str(cfg.get(key, ""))
-            win = rumps.Window(
-                title=f"Summeap Settings — {label}",
-                message=f"{label}:",
-                default_text=current,
-                ok="Save",
-                cancel="Skip",
-                dimensions=(400, 24),
-            )
-            response = win.run()
-            if response.clicked == 1 and response.text.strip() != current:
-                val = response.text.strip()
-                cfg[key] = int(val) if key == "obs_port" else val
-                changed = True
-
-        if changed:
-            _config.save(cfg)
+        def _on_save(cfg):
             rumps.notification(
                 title="Summeap",
                 subtitle="Settings saved",
                 message="Configuration updated successfully.",
             )
+        _settings.show_settings(on_save=_on_save)
 
     # ── Global hotkey (optional — requires pynput) ───────────────────────────
 
