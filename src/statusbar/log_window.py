@@ -9,15 +9,26 @@ import os
 from pathlib import Path
 from typing import Optional
 
-import objc
 from AppKit import (
     NSPanel, NSScrollView, NSTextView, NSFont, NSMakeRect, NSColor,
     NSWindowStyleMaskTitled, NSWindowStyleMaskClosable,
     NSWindowStyleMaskResizable, NSWindowStyleMaskMiniaturizable,
     NSBackingStoreBuffered, NSApp, NSFloatingWindowLevel, NSObject,
-    NSString, NSAttributedString,
+    NSAttributedString,
 )
-from Foundation import NSTimer, NSRunLoop, NSDefaultRunLoopMode
+from Foundation import NSThread, NSOperationQueue, NSBlockOperation
+
+
+# ── Main-thread dispatcher ────────────────────────────────────────────────────
+
+def _dispatch_main(fn):
+    """Run fn on the main thread via NSOperationQueue.mainQueue."""
+    if NSThread.isMainThread():
+        fn()
+    else:
+        NSOperationQueue.mainQueue().addOperationWithBlock_(fn)
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 # ── Singleton ─────────────────────────────────────────────────────────────────
 _active_panel: Optional[NSPanel] = None
@@ -102,8 +113,7 @@ def append_text(text_view: NSTextView, text: str):
         storage.insertAttributedString_atIndex_(attr_str, end)
         # Scroll to bottom
         text_view.scrollRangeToVisible_((storage.length(), 0))
-    # Must run on main thread
-    objc.callAfter(_append)
+    _dispatch_main(_append)
 
 
 def run_in_log_window(job: dict):
