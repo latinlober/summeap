@@ -237,7 +237,7 @@ def _prompt_transcribe(video_path: Path) -> None:
     set resp to choose from list opts ¬
         with title "OBS Teams · {video_path.name}" ¬
         with prompt "¿Generar resumen con media2md?" ¬
-        default items {{"MD + Word"}}
+        default items {{"MD + PDF + Word"}}
     if resp is false then return "Cancelar"
     return item 1 of resp
 end tell"""
