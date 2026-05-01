@@ -210,12 +210,23 @@ The output includes a participants section:
 
 ```
 summeap/
-├── media2md.py           # Main pipeline script
-├── obs_teams_record.py   # OBS controller + Teams integration
-├── hammerspoon_init.lua  # macOS global hotkey config
-├── Dockerfile            # CPU image (macOS / Linux)
-├── Dockerfile.cuda       # NVIDIA CUDA image
-├── docker-compose.yml    # Compose with volume caching
+├── src/
+│   ├── media2md/
+│   │   ├── media2md.py           # Main pipeline: transcription + LLM summarisation
+│   │   └── README.md
+│   ├── obs-teams/
+│   │   ├── obs_teams_record.py   # OBS controller + Teams call integration
+│   │   └── README.md
+│   └── hammerspoon/
+│       ├── hammerspoon_init.lua  # macOS global hotkey (Cmd+Shift+R)
+│       └── README.md
+├── docker/
+│   ├── Dockerfile                # CPU image (macOS / Linux)
+│   ├── Dockerfile.cuda           # NVIDIA CUDA image
+│   ├── docker-compose.yml        # Compose with volume caching
+│   └── README.md
+├── docs/                         # Additional documentation
+├── .gitignore
 └── README.md
 ```
 
