@@ -1,0 +1,47 @@
+services:
+  # ── Perfil CPU (macOS / Linux sin GPU) ──────────────────────────────────────
+  media2md:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: media2md:latest
+    volumes:
+      # Carpeta de trabajo: monta el directorio actual
+      - .:/data
+      # Caché de modelos Whisper — se reutiliza entre ejecuciones
+      - whisper-cache:/home/media2md/.cache/whisper
+      # Caché de modelos HuggingFace (pyannote) — se reutiliza entre ejecuciones
+      - hf-cache:/home/media2md/.cache/huggingface
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      # URL de LM Studio del anfitrión (host.docker.internal resuelve al Mac/Linux host)
+      - LMSTUDIO_URL=${LMSTUDIO_URL:-http://host.docker.internal:1234}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ── Perfil CUDA (Linux + NVIDIA) ────────────────────────────────────────────
+  media2md-cuda:
+    build:
+      context: .
+      dockerfile: Dockerfile.cuda
+    image: media2md:cuda
+    volumes:
+      - .:/data
+      - whisper-cache:/home/media2md/.cache/whisper
+      - hf-cache:/home/media2md/.cache/huggingface
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - LMSTUDIO_URL=${LMSTUDIO_URL:-http://host.docker.internal:1234}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  whisper-cache:
+  hf-cache:

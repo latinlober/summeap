@@ -1,0 +1,57 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# media2md — Dockerfile variante CUDA (Linux + NVIDIA)
+#
+# Build:
+#   docker build -f Dockerfile.cuda -t media2md:cuda .
+#
+# Run:
+#   docker run --rm --gpus all -v "$PWD":/data -e HF_TOKEN media2md:cuda video.mp4
+# ─────────────────────────────────────────────────────────────────────────────
+
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        ffmpeg \
+        git \
+        libsndfile1 \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Alias python3 → python
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
+RUN useradd -m -u 1000 media2md
+USER media2md
+WORKDIR /home/media2md
+
+ENV PATH="/home/media2md/.local/bin:$PATH"
+ENV WHISPER_CACHE="/home/media2md/.cache/whisper"
+ENV HF_HOME="/home/media2md/.cache/huggingface"
+
+RUN pip3 install --no-cache-dir --upgrade pip
+
+# PyTorch con soporte CUDA 12.4
+RUN pip3 install --no-cache-dir \
+        torch \
+        torchaudio \
+        --index-url https://download.pytorch.org/whl/cu124
+
+RUN pip3 install --no-cache-dir \
+        openai-whisper \
+        openai \
+        "speechbrain==1.0.0" \
+        "pyannote.audio==3.4.0" \
+        soundfile \
+        numpy
+
+COPY --chown=media2md:media2md media2md.py /home/media2md/media2md.py
+
+VOLUME ["/data"]
+WORKDIR /data
+
+ENTRYPOINT ["python3", "/home/media2md/media2md.py"]
+CMD ["--help"]
