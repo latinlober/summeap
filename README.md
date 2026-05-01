@@ -232,6 +232,18 @@ summeap/
 
 ---
 
+## Roadmap
+
+Contributions and ideas are welcome! Here's what we'd like to tackle next:
+
+- [ ] **Multi-platform support** — Linux and Windows in addition to macOS (recording integration, hotkeys, system notifications)
+- [ ] **More conferencing platforms** — Zoom, Google Meet, Webex, and others alongside Microsoft Teams
+- [ ] **Lightweight CLI recorder** — replace OBS with a minimal command-line audio/screen capture utility, removing the need for a full OBS installation
+- [ ] **Status bar app** — a native menubar application to browse past summaries, open reports, and configure settings without editing code
+- [ ] **Automated start/stop** — detect call events directly from the conferencing client (join/leave hooks, window focus events) to start and stop recording without any manual hotkey
+
+---
+
 ## License
 
 MIT
