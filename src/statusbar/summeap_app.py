@@ -134,13 +134,30 @@ class SummeapApp(rumps.App):
 
     def on_settings(self, _):
         def _on_save(cfg):
-            self._restart_hotkey()
+            # _restart_hotkey uses TSM APIs that must run on the main thread.
+            # Dispatch via GCD to avoid crashing when called from AppKit delegate.
+            try:
+                from Foundation import NSObject as _NSObj
+                import objc as _objc
+                _dispatch_async_main = _objc.lookUpClass("NSThread").performSelectorOnMainThread_withObject_waitUntilDone_
+            except Exception:
+                pass
+            # Simplest safe approach: just re-register after a short delay on
+            # the main runloop using rumps timer trick — but easiest is to use
+            # AppKit's performSelector on main thread via a helper object.
+            self._pending_restart_hotkey = True
             rumps.notification(
                 title="Summeap",
                 subtitle="Settings saved",
                 message="Configuration updated successfully.",
             )
         _settings.show_settings(on_save=_on_save)
+
+    @rumps.timer(1)
+    def _check_hotkey_restart(self, _):
+        if getattr(self, '_pending_restart_hotkey', False):
+            self._pending_restart_hotkey = False
+            self._restart_hotkey()
 
     # ── OBS Log ──────────────────────────────────────────────────────────────
 

@@ -281,27 +281,46 @@ class _Delegate(NSObject):
 
     def cancel_(self, sender):
         global _active_panel, _active_delegate
-        self.panel.close()
+        panel = self.panel
         _active_panel = _active_delegate = None
+        panel.orderOut_(None)
 
     def save_(self, sender):
         global _active_panel, _active_delegate
-        cfg = _config.load()
-        for key, widget in self.widgets.items():
-            if isinstance(widget, list):
-                # checkboxes: list of (flag_val, NSButton)
-                active = [fv for fv, cb in widget if cb.state() == 1]
-                cfg[key] = ",".join(active)
-            elif isinstance(widget, NSPopUpButton):
-                val = widget.titleOfSelectedItem()
-                if val:
-                    cfg[key] = val
-            else:
-                val = widget.stringValue().strip()
-                if val:
-                    cfg[key] = int(val) if key == "obs_port" else val
-        _config.save(cfg)
-        self.panel.close()
+        cfg = None
+        try:
+            cfg = _config.load()
+            for key, widget in self.widgets.items():
+                if isinstance(widget, list):
+                    # checkboxes: list of (flag_val, NSButton)
+                    active = [fv for fv, cb in widget if cb.state() == 1]
+                    cfg[key] = ",".join(active)
+                elif isinstance(widget, NSPopUpButton):
+                    val = widget.titleOfSelectedItem()
+                    if val:
+                        cfg[key] = val
+                else:
+                    val = widget.stringValue().strip()
+                    if val:
+                        cfg[key] = int(val) if key == "obs_port" else val
+            _config.save(cfg)
+            print("Settings saved OK")
+        except Exception as e:
+            import traceback
+            print(f"ERROR in save_: {e}")
+            traceback.print_exc()
+        # Dismiss panel — use orderOut_ to avoid re-entrant close callbacks
+        panel = self.panel
+        on_save = self.on_save
+        _active_panel = _active_delegate = None
+        panel.orderOut_(None)
+        if cfg is not None and on_save:
+            try:
+                on_save(cfg)
+            except Exception as e:
+                import traceback
+                print(f"ERROR in on_save callback: {e}")
+                traceback.print_exc()
         _active_panel = _active_delegate = None
         if self.on_save:
             self.on_save(cfg)
