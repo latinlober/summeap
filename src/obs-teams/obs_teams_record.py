@@ -13,20 +13,36 @@ Uso:
 import re
 import sys
 import os
+import json
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
 # ── Configuración ─────────────────────────────────────────────────────────────
-OBS_HOST       = "localhost"
-OBS_PORT       = 4455
-OBS_PASSWORD   = "your_obs_websocket_password"   # OBS → Tools → WebSocket Server Settings
-OBS_SCENE      = "Teams"
-RECORDINGS_DIR = Path.home() / "Movies"           # folder where OBS saves recordings
-MEDIA2MD       = str(Path.home() / "bin" / "media2md.py")
-HF_TOKEN       = "your_huggingface_token"         # only needed for --diarize
-PYTHON         = "/usr/bin/python3"
-EXTRA_PATH     = "/usr/local/bin:/opt/homebrew/bin"
+# Values are loaded from ~/.config/summeap/config.json when available.
+# The hardcoded values below serve as fallback defaults — edit them directly
+# if you prefer not to use the status bar app / config file.
+
+def _load_cfg() -> dict:
+    cfg_path = Path.home() / ".config" / "summeap" / "config.json"
+    if cfg_path.exists():
+        try:
+            return json.loads(cfg_path.read_text())
+        except Exception:
+            pass
+    return {}
+
+_cfg = _load_cfg()
+
+OBS_HOST       = _cfg.get("obs_host",        "localhost")
+OBS_PORT       = int(_cfg.get("obs_port",    4455))
+OBS_PASSWORD   = _cfg.get("obs_password",    "your_obs_websocket_password")
+OBS_SCENE      = _cfg.get("obs_scene",       "Teams")
+RECORDINGS_DIR = Path(_cfg.get("recordings_dir", str(Path.home() / "Movies")))
+MEDIA2MD       = _cfg.get("media2md_path",   str(Path.home() / "bin" / "media2md.py"))
+HF_TOKEN       = _cfg.get("hf_token",        "your_huggingface_token")
+PYTHON         = _cfg.get("python_path",     "/usr/bin/python3")
+EXTRA_PATH     = _cfg.get("extra_path",      "/usr/local/bin:/opt/homebrew/bin")
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Fichero temporal donde se persiste el título entre invocaciones separadas

@@ -120,6 +120,29 @@ meeting_qwen3-35b.md   / .docx
 
 ---
 
+## Status Bar App
+
+A native macOS menubar app built with Python + `rumps`:
+
+```bash
+pip3 install rumps pynput obsws-python
+python3 src/statusbar/summeap_app.py
+```
+
+| Feature | Description |
+|---------|-------------|
+| 🔴 / ⚫ icon | Live recording state, polls OBS every 3s |
+| Start / Stop | Toggle recording from the menu |
+| Recent Summaries | Top 10 summaries from recordings folder, click to open |
+| Settings | Configure OBS, paths, tokens and models without editing code |
+| `Cmd+Shift+R` | Global hotkey via `pynput` (replaces Hammerspoon) |
+
+Config is stored at `~/.config/summeap/config.json` and shared with `obs_teams_record.py`.
+
+See [`src/statusbar/README.md`](src/statusbar/README.md) for full setup instructions.
+
+---
+
 ## OBS + Teams Integration
 
 Automatically records Microsoft Teams calls and triggers summarisation when you stop recording.
@@ -217,8 +240,13 @@ summeap/
 │   ├── obs-teams/
 │   │   ├── obs_teams_record.py   # OBS controller + Teams call integration
 │   │   └── README.md
-│   └── hammerspoon/
-│       ├── hammerspoon_init.lua  # macOS global hotkey (Cmd+Shift+R)
+│   ├── hammerspoon/
+│   │   ├── hammerspoon_init.lua  # macOS global hotkey (Cmd+Shift+R) — optional
+│   │   └── README.md
+│   └── statusbar/
+│       ├── summeap_app.py        # macOS status bar app (rumps)
+│       ├── config.py             # Config R/W (~/.config/summeap/config.json)
+│       ├── obs_client.py         # OBS status polling
 │       └── README.md
 ├── docker/
 │   ├── Dockerfile                # CPU image (macOS / Linux)
@@ -236,6 +264,7 @@ summeap/
 
 Contributions and ideas are welcome! Here's what we'd like to tackle next:
 
+- [x] **Status bar app** — native macOS menubar app with summaries list, settings UI and global hotkey (`src/statusbar/`)
 - [ ] **Multi-platform support** — Linux and Windows in addition to macOS (recording integration, hotkeys, system notifications)
 - [ ] **More conferencing platforms** — Zoom, Google Meet, Webex, and others alongside Microsoft Teams
 - [ ] **Lightweight CLI recorder** — replace OBS with a minimal command-line audio/screen capture utility, removing the need for a full OBS installation
