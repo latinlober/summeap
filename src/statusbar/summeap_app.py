@@ -162,75 +162,107 @@ class SummeapApp(rumps.App):
     def on_show_log(self, _):
         _log_window.show_log_window()
 
-    # ── Global hotkey — Cocoa NSEvent monitor (no pynput / no thread issues) ──
+    # ── Global hotkey — CGEventTap (requires Accessibility permission) ────────
 
     def _start_hotkey(self):
-        self._hotkey_monitor = None
+        self._hotkey_tap = None
+        self._hotkey_run_loop_source = None
         self._restart_hotkey()
 
     def _restart_hotkey(self):
-        try:
-            from AppKit import NSEvent, NSKeyDownMask, NSEventModifierFlagCommand, \
-                NSEventModifierFlagShift, NSEventModifierFlagControl, \
-                NSEventModifierFlagOption
-        except ImportError:
-            print("AppKit not available — hotkey disabled")
-            return
+        import Quartz
 
-        # Remove existing monitor
-        if getattr(self, "_hotkey_monitor", None) is not None:
+        # Remove existing tap
+        if getattr(self, "_hotkey_tap", None) is not None:
             try:
-                NSEvent.removeMonitor_(self._hotkey_monitor)
+                Quartz.CGEventTapEnable(self._hotkey_tap, False)
             except Exception:
                 pass
-            self._hotkey_monitor = None
+            self._hotkey_tap = None
 
         cfg = _config.load()
         key_combo = cfg.get("hotkey_toggle", "<cmd>+<shift>+r").strip().lower()
         if not key_combo:
             return
 
-        # Parse key combo string like "<cmd>+<shift>+r"
+        # Parse modifiers and key char
         required_mods = 0
         key_char = ""
         for part in key_combo.split("+"):
             part = part.strip().strip("<>")
             if part in ("cmd", "command"):
-                required_mods |= NSEventModifierFlagCommand
-            elif part in ("shift",):
-                required_mods |= NSEventModifierFlagShift
+                required_mods |= Quartz.kCGEventFlagMaskCommand
+            elif part == "shift":
+                required_mods |= Quartz.kCGEventFlagMaskShift
             elif part in ("ctrl", "control"):
-                required_mods |= NSEventModifierFlagControl
+                required_mods |= Quartz.kCGEventFlagMaskControl
             elif part in ("alt", "option"):
-                required_mods |= NSEventModifierFlagOption
+                required_mods |= Quartz.kCGEventFlagMaskAlternate
             else:
-                key_char = part  # the actual key character
+                key_char = part
 
         if not key_char:
-            print("hotkey: no key character found in combo, disabling")
+            print("hotkey: no key character found, disabling")
             return
 
-        _mask = 1 << 10  # NSEventMaskKeyDown
+        key_code = _char_to_keycode(key_char)
+        if key_code is None:
+            print(f"hotkey: unknown key '{key_char}', disabling")
+            return
 
-        def _handler(event):
+        def _tap_cb(proxy, event_type, event, refcon):
             try:
-                ch = event.charactersIgnoringModifiers()
-                if ch is None:
-                    return
-                mods = event.modifierFlags() & (
-                    NSEventModifierFlagCommand | NSEventModifierFlagShift |
-                    NSEventModifierFlagControl | NSEventModifierFlagOption
-                )
-                if ch.lower() == key_char and mods == required_mods:
-                    _obs.toggle()
+                if event_type == Quartz.kCGEventKeyDown:
+                    code  = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
+                    flags = Quartz.CGEventGetFlags(event) & (
+                        Quartz.kCGEventFlagMaskCommand | Quartz.kCGEventFlagMaskShift |
+                        Quartz.kCGEventFlagMaskControl | Quartz.kCGEventFlagMaskAlternate
+                    )
+                    if code == key_code and flags == required_mods:
+                        _obs.toggle()
             except Exception as e:
-                print(f"hotkey handler error: {e}")
+                print(f"hotkey tap error: {e}")
+            return event
 
-        monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
-            _mask, _handler
+        tap = Quartz.CGEventTapCreate(
+            Quartz.kCGSessionEventTap,
+            Quartz.kCGHeadInsertEventTap,
+            Quartz.kCGEventTapOptionDefault,
+            Quartz.CGEventMaskBit(Quartz.kCGEventKeyDown),
+            _tap_cb,
+            None,
         )
-        self._hotkey_monitor = monitor
-        print(f"Global hotkey {key_combo!r} registered via NSEvent monitor")
+        if tap is None:
+            print("hotkey: CGEventTapCreate failed — Accessibility permission required")
+            print("  → System Settings → Privacy & Security → Accessibility")
+            print(f"  → Add: /Library/Developer/CommandLineTools/Library/Frameworks/"
+                  f"Python3.framework/Versions/3.9/Resources/Python.app")
+            return
+
+        run_loop_source = Quartz.CFMachPortCreateRunLoopSource(None, tap, 0)
+        Quartz.CFRunLoopAddSource(
+            Quartz.CFRunLoopGetMain(),
+            run_loop_source,
+            Quartz.kCFRunLoopCommonModes,
+        )
+        Quartz.CGEventTapEnable(tap, True)
+        self._hotkey_tap = tap
+        self._hotkey_run_loop_source = run_loop_source
+        print(f"Global hotkey {key_combo!r} registered via CGEventTap")
+
+
+def _char_to_keycode(char: str) -> int:
+    """Map a single character to its macOS virtual key code."""
+    _map = {
+        'a': 0,  's': 1,  'd': 2,  'f': 3,  'h': 4,  'g': 5,  'z': 6,
+        'x': 7,  'c': 8,  'v': 9,  'b': 11, 'q': 12, 'w': 13, 'e': 14,
+        'r': 15, 'y': 16, 't': 17, '1': 18, '2': 19, '3': 20, '4': 21,
+        '6': 22, '5': 23, '=': 24, '9': 25, '7': 26, '-': 27, '8': 28,
+        '0': 29, ']': 30, 'o': 31, 'u': 32, '[': 33, 'i': 34, 'p': 35,
+        'l': 37, 'j': 38, "'": 39, 'k': 40, ';': 41, '\\': 42, ',': 43,
+        '/': 44, 'n': 45, 'm': 46, '.': 47, '`': 50,
+    }
+    return _map.get(char.lower())
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
