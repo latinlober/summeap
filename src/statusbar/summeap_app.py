@@ -12,7 +12,6 @@ Add to Login Items for auto-start:
 
 import subprocess
 import sys
-import threading
 from pathlib import Path
 
 # Ensure sibling modules are importable when run from any directory
@@ -134,30 +133,13 @@ class SummeapApp(rumps.App):
 
     def on_settings(self, _):
         def _on_save(cfg):
-            # _restart_hotkey uses TSM APIs that must run on the main thread.
-            # Dispatch via GCD to avoid crashing when called from AppKit delegate.
-            try:
-                from Foundation import NSObject as _NSObj
-                import objc as _objc
-                _dispatch_async_main = _objc.lookUpClass("NSThread").performSelectorOnMainThread_withObject_waitUntilDone_
-            except Exception:
-                pass
-            # Simplest safe approach: just re-register after a short delay on
-            # the main runloop using rumps timer trick — but easiest is to use
-            # AppKit's performSelector on main thread via a helper object.
-            self._pending_restart_hotkey = True
+            self._restart_hotkey()
             rumps.notification(
                 title="Summeap",
                 subtitle="Settings saved",
                 message="Configuration updated successfully.",
             )
         _settings.show_settings(on_save=_on_save)
-
-    @rumps.timer(1)
-    def _check_hotkey_restart(self, _):
-        if getattr(self, '_pending_restart_hotkey', False):
-            self._pending_restart_hotkey = False
-            self._restart_hotkey()
 
     # ── OBS Log ──────────────────────────────────────────────────────────────
 
@@ -170,41 +152,75 @@ class SummeapApp(rumps.App):
             return
         subprocess.Popen(["open", "-a", "Console", str(log_path)])
 
-    # ── Global hotkey (optional — requires pynput) ───────────────────────────
+    # ── Global hotkey — Cocoa NSEvent monitor (no pynput / no thread issues) ──
 
     def _start_hotkey(self):
-        self._hotkey_listener = None
+        self._hotkey_monitor = None
         self._restart_hotkey()
 
     def _restart_hotkey(self):
         try:
-            from pynput import keyboard  # type: ignore
-
-            # Stop existing listener if any
-            if getattr(self, "_hotkey_listener", None) is not None:
-                try:
-                    self._hotkey_listener.stop()
-                except Exception:
-                    pass
-                self._hotkey_listener = None
-
-            cfg = _config.load()
-            key_combo = cfg.get("hotkey_toggle", "<cmd>+<shift>+r").strip()
-            if not key_combo:
-                return
-
-            def on_activate():
-                _obs.toggle()
-
-            listener = keyboard.GlobalHotKeys({key_combo: on_activate})
-            t = threading.Thread(target=listener.start, daemon=True)
-            t.start()
-            self._hotkey_listener = listener
-            print(f"Global hotkey {key_combo!r} registered via pynput")
+            from AppKit import NSEvent, NSKeyDownMask, NSEventModifierFlagCommand, \
+                NSEventModifierFlagShift, NSEventModifierFlagControl, \
+                NSEventModifierFlagOption
         except ImportError:
-            print("pynput not installed — global hotkey disabled")
-        except Exception as e:
-            print(f"Could not register global hotkey: {e}")
+            print("AppKit not available — hotkey disabled")
+            return
+
+        # Remove existing monitor
+        if getattr(self, "_hotkey_monitor", None) is not None:
+            try:
+                NSEvent.removeMonitor_(self._hotkey_monitor)
+            except Exception:
+                pass
+            self._hotkey_monitor = None
+
+        cfg = _config.load()
+        key_combo = cfg.get("hotkey_toggle", "<cmd>+<shift>+r").strip().lower()
+        if not key_combo:
+            return
+
+        # Parse key combo string like "<cmd>+<shift>+r"
+        required_mods = 0
+        key_char = ""
+        for part in key_combo.split("+"):
+            part = part.strip().strip("<>")
+            if part in ("cmd", "command"):
+                required_mods |= NSEventModifierFlagCommand
+            elif part in ("shift",):
+                required_mods |= NSEventModifierFlagShift
+            elif part in ("ctrl", "control"):
+                required_mods |= NSEventModifierFlagControl
+            elif part in ("alt", "option"):
+                required_mods |= NSEventModifierFlagOption
+            else:
+                key_char = part  # the actual key character
+
+        if not key_char:
+            print("hotkey: no key character found in combo, disabling")
+            return
+
+        _mask = 1 << 10  # NSEventMaskKeyDown
+
+        def _handler(event):
+            try:
+                ch = event.charactersIgnoringModifiers()
+                if ch is None:
+                    return
+                mods = event.modifierFlags() & (
+                    NSEventModifierFlagCommand | NSEventModifierFlagShift |
+                    NSEventModifierFlagControl | NSEventModifierFlagOption
+                )
+                if ch.lower() == key_char and mods == required_mods:
+                    _obs.toggle()
+            except Exception as e:
+                print(f"hotkey handler error: {e}")
+
+        monitor = NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
+            _mask, _handler
+        )
+        self._hotkey_monitor = monitor
+        print(f"Global hotkey {key_combo!r} registered via NSEvent monitor")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
