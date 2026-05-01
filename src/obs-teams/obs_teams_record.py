@@ -227,9 +227,39 @@ def stop_recording() -> None:
             notify("⏹️ OBS Teams", "Grabación detenida")
 
 
+def _wait_for_file_ready(path: Path, timeout: int = 60, stable_secs: int = 3) -> bool:
+    """Wait until the file exists and its size has been stable for stable_secs seconds.
+    Returns True if ready, False if timed out."""
+    import time
+    print(f"   Esperando a que OBS finalice la escritura de {path.name}…")
+    deadline = time.time() + timeout
+    last_size = -1
+    stable_since = None
+    while time.time() < deadline:
+        if path.exists() and path.stat().st_size > 0:
+            size = path.stat().st_size
+            if size == last_size:
+                if stable_since is None:
+                    stable_since = time.time()
+                elif time.time() - stable_since >= stable_secs:
+                    print(f"   Fichero listo ({size // 1024} KB)")
+                    return True
+            else:
+                last_size = size
+                stable_since = None
+        time.sleep(1)
+    print(f"   ⚠️  Timeout esperando fichero: {path.name}")
+    return False
+
+
 def _prompt_transcribe(video_path: Path) -> None:
     """Lanza media2md usando la configuración de settings, sin diálogo."""
     import stat, tempfile
+
+    # Wait for OBS to finish writing the file before processing
+    if not _wait_for_file_ready(video_path):
+        notify("⚠️ Summeap", f"Fichero no disponible: {video_path.name}")
+        return
 
     # Read flags directly from config — no dialog shown
     _fmt     = {f.strip().lower() for f in _cfg.get("default_formats", "pdf,docx").split(",") if f.strip()}
