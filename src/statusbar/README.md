@@ -44,9 +44,44 @@ brew install ffmpeg               # only needed for CLI backend
 
    Settings are saved to `~/.config/summeap/config.json`.
 
-3. **Auto-start** — add to Login Items:
-   - Wrap in a `.app` with [Platypus](https://sveinbjorn.org/platypus) or py2app
-   - Or add a LaunchAgent plist in `~/Library/LaunchAgents/`
+3. **Auto-start** — create a LaunchAgent so the app starts automatically at login:
+
+   ```bash
+   cat > ~/Library/LaunchAgents/com.summeap.statusbar.plist << 'EOF'
+   <?xml version="1.0" encoding="UTF-8"?>
+   <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+   <plist version="1.0">
+   <dict>
+       <key>Label</key>
+       <string>com.summeap.statusbar</string>
+       <key>ProgramArguments</key>
+       <array>
+           <string>/usr/bin/python3</string>
+           <string>/Users/YOUR_USER/summeap-repo/src/statusbar/summeap_app.py</string>
+       </array>
+       <key>RunAtLoad</key>
+       <true/>
+       <key>KeepAlive</key>
+       <false/>
+       <key>StandardOutPath</key>
+       <string>/tmp/summeap-statusbar.log</string>
+       <key>StandardErrorPath</key>
+       <string>/tmp/summeap-statusbar.error.log</string>
+   </dict>
+   </plist>
+   EOF
+
+   launchctl load ~/Library/LaunchAgents/com.summeap.statusbar.plist
+   ```
+
+   > Replace `YOUR_USER` with your macOS username, or use the absolute path to the repo.
+
+   To disable auto-start:
+   ```bash
+   launchctl unload ~/Library/LaunchAgents/com.summeap.statusbar.plist
+   ```
+
+   Logs are written to `/tmp/summeap-statusbar.log` and `/tmp/summeap-statusbar.error.log`.
 
 ## Recording Backends
 
